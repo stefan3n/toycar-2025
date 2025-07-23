@@ -12,11 +12,11 @@ struct Response
   int data[16];
   int len;
 };
-// for more infromation about this check Commands.h from SMARTCAEMOTORCONTROL
+// More information about this in Commands.h from package motorControl 
 
 enum CommandID
 {
-  CMD_PING = 0, CMD_STOP, CMD_MOVE_ONE, CMD_MOVE_BOTH, CMD_EMERGENCY, CMD_END_EMERGENCY, CMD_ROTATE_RIGHT, CMD_ROTATE_LEFT, 
+  CMD_PING = 0, CMD_STOP, CMD_MOVE_ONE, CMD_MOVE_ALL, CMD_EMERGENCY, CMD_END_EMERGENCY, CMD_ROTATE_RIGHT, CMD_ROTATE_LEFT, 
   CMD_START_POSITION_JETSON, CMD_INITIAL_POS, CMD_CALIBRATE_LEFT, CMD_CALIBRATE_RIGHT, CMD_CLAW_OPEN, CMD_CLAW_CLOSE,
   CMD_ROTATE_CLAW, CMD_FINAL_ARM
 };
@@ -41,140 +41,157 @@ typedef int(*Command)(int, const int*);
 */
 extern Command scheduledCommand;
 
-Response pingCommand(int len, const int* args);
 /*
-  Expects no arguments
-  Errors: no errors
+  Description: Responds to a ping command by sending back the current base position and rotation direction status.
+  Input: N/A
+  Errors: N/A
 */
+Response pingCommand(int len, const int* args);
 
-
-int stop(int len, const int* args);
 
 /*
-  This functions don't need any arguments
-  It will stop the motors from moving
-  Errors:
+  Description: Stops the stepper and the actuators.
+  Input: N/A
+  Errors: 
     - ERROR_BAD_MSG if the car is in emergency
 */
+int stop(int len, const int* args);
 
-int moveOne(int len, const int* args);
 
 /*
-  inputs:
-    2 values: one is the actuator who is moving and another is the new position
-  errors:
+  Description: Processes a command to move a specified actuator to a target position within allowed limits, enabling the actuator if conditions are met.
+  Input: 
+    - args[0] is the selected Actuator
+    - args[1] is the new position 
+  Errors:
+    - ERROR_BAD_MSG if the command is wrong
+    - ERROR_ARGUMENTS_LENGTH if the command has to few arguments
+*/
+int moveOne(int len, const int* args);
+
+
+/*  
+  Description:
+  Input:
+    - args[0] is the new position for (1) first actuator
+    - args[1] is the new position for (2) second actuator
+    - args[2] is the new position for (3) third actuator
+  Errors:
     ERROR_BAD_MSG if the command is wrong
     ERROR_ARGUMENTS_LENGTH if the command has to few arguments
 */
+int move_all(int len, const int* args);
 
-int moveBoth(int len, const int* args);
 
 /*
-  inputs:
-    2 values: are the position of the actuators in order:
-    first value for first actuator
-    second value for second actuator
-  errors:
-    ERROR_ARGUMENTS_LENGTH if the commnad has insuficient arguments
-    ERROR_BAD_MSG if the arm is in emergency or a CMD_FINAL_COMMAND 
-                  is running
+  Description: Disables the stepper and the actuators and enters emergency state
+  Input: N/A
+  Errors: N/A
 */
-
 int emergency_cmd(int len, const int* args);
-/*
-  inputs:
-    - no inputs
-  errors:
-    - no errors
-*/
 
+
+/*
+  Description: Enables the stepper and the actuators and exits emergency state
+  Input: N/A
+  Errors: N/A
+*/
 int end_emergency(int len, const int* args);
-/*
-  inputs:
-    - no inputs
-  errors:
-    - no errors
-*/
 
+
+/*
+  Description: Calculates and sets the number of steps needed to rotate the stepper motor to the left
+  Input:
+    - Rotation angle (in degrees)
+  Errors:
+    - ERROR_BAD_MSG if the nuber of steps is negative
+      or the arm is in emergency or CMD_FINAL_COMMAND 
+      is running
+    - ERROR_ARGUMENT_LENGHT if the angle is not send
+*/
 int rotateLeft(int len, const int* args);
+
+
 /*
-  inputs: 
-      -one positive number witch will be the angle in degree
-  errors:
+  Description: Calculates and sets the number of steps needed to rotate the stepper motor to the right
+  Input:
+    - Rotation angle (in degrees)
+  Errors:
     - ERROR_BAD_MSG if the nuber of steps is negative
       or the arm is in emergency or CMD_FINAL_COMMAND 
       is running
     - ERROR_ARGUMENT_LENGHT if the angle is not send
 */
-
 int rotateRight(int len, const int* args);
-/*
-  inputs: 
-      -one positive number witch will be the angle in degree
-  errors:
-    - ERROR_BAD_MSG if the nuber of steps is negative
-      or the arm is in emergency or CMD_FINAL_COMMAND 
-      is running
-    - ERROR_ARGUMENT_LENGHT if the angle is not send
-*/
 
-int startPositionJetson(int len, const int* args);
+
 /*
-  inputs:
+  Description: Sets the initial stepper position based on the value received from Jetson
+  Input:
     - the startPosition from the jetson
     - the direction
-  ERRORS:
+  Errors:
     - ERROR_BAD_MSG if the arm is in emergency or CMD_FINAL_COMMAND
     - ERROR_ARGUMENT_LENGHT if the sartPos and direction are not send
 */
+int startPositionJetson(int len, const int* args);
 
-int backToInitialPos(int len, const int* args);
+
 /*
-  inputs:
-    this function don't  need any inputs
-  errors:
+  Description: Resets stepper, actuators, claw
+  Input: N/A
+  Errors: 
     - ERROR_BAD_MSG if it is send while emergency state or
       the CMD_FINAL_ARM is executing
 */
+int backToInitialPos(int len, const int* args);
 
+
+/*
+  Description: Moves the stepper motor a specified number of steps to the left for calibration and resets position tracking
+  Input:
+    - numbers of steps to rotate left
+  Errors: 
+    - ERROR_BAD_MSG if the command is sent while emergency state
+      or the CMD_FINAL_COMMAND is running
+    - ERROR_ARGUMENT_LENGHT if the number of steps is not send
+*/
 int calibrate_left(int len, const int* args);
+
+
 /*
-  inputs:
-    -numbers of steps to rotate left
-  errors:
+  Description: Moves the stepper motor a specified number of steps to the right for calibration and resets position tracking
+  Input:
+    - numbers of steps to rotate right
+  Errors: 
     - ERROR_BAD_MSG if the command is sent while emergency state
       or the CMD_FINAL_COMMAND is running
     - ERROR_ARGUMENT_LENGHT if the number of steps is not send
 */
-
 int calibrate_right(int len, const int* args);
-/*
-  inputs:
-    -numbers of steps to rotate left
-  errors:
-    - ERROR_BAD_MSG if the command is sent while emergency state
-      or the CMD_FINAL_COMMAND is running
-    - ERROR_ARGUMENT_LENGHT if the number of steps is not send
-*/
 
+
+/*
+  Description: Fully opens the robotic claw by setting its servo angle to 180 degrees
+  Input: N/A
+  Errors:
+    - ERROR_BAD_MSG if it is send while emergency state or 
+    the CMD_FINAL_COMMAND is running
+*/
 int openClaw(int len, const int* args);
-/*
-  inputs:
-    - this command don't have any inputs
-  errors:
-    - ERROR_BAD_MSG if it is send while emergency state or 
-      the CMD_FINAL_COMMAND is running
-*/
 
+
+/*
+  Description: Fully closes the robotic claw by setting its servo angle to 45 degrees
+  Input: N/A
+  Errors:
+   - ERROR_BAD_MSG if it is send while emergency state or 
+     the CMD_FINAL_COMMAND is running
+*/
 int closeClaw(int len, const int* args);
-/*
-  inputs:
-    -this command don't have any inputs
-  errors:
-    - ERROR_BAD_MSG if it is send while emergency state or 
-      the CMD_FINAL_COMMAND is running
-*/
 
+
+/* ============== ISN'T USED ANYMORE ============== 
 int rotate_claw(int len, const int* args);
 /*
   inputs:
@@ -183,24 +200,33 @@ int rotate_claw(int len, const int* args);
     - ERROR_ARGUMENTS_LENGTH if the angle is not send
     - ERROR_BAD_MSG if the command is send while emergency state 
       is active or CMD_FINAL_ARM is running
-*/
+  ===============================================*/
 
-int final_command(int len, const int* args);
+
 /*
-  inputs:
-    - direction, angle in degree, xPosition, yPosition, angle for claw
-  errors:
+  DESCRIPTION:
+  INPUT:
+    - direction
+    - angle in degrees
+    - xPosition
+    - yPosition
+    - claw angle
+  ERRORS:
     - ERROR_BAD_MSG if the command is send while another CMD_FINAL_ARM
       is running or the emergency state is active
     - ERROR_ARGUMENT_LENGHT if the command hasn't all needed
       arguments: direction, angle for stepper, xPosition, yPosition,
       angle for claw
-*/
+*/ 
+int final_command(int len, const int* args);
+
 
 
 /*
   New command functions should be added here. The value of the CommandID should match the position in this array.
 */
+
+
 
 const Command COMMAND_ARRAY[] = {
   pingCommand,          // CMD_PING

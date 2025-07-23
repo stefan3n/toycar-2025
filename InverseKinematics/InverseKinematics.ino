@@ -2,15 +2,18 @@
 #include "Commands.h"
 #include "Communication.h"
 
-// define global variables from HardwareConfiguration
+// Global variables from HardwareConfiguration.h
 int feedback_value1 = 0;
 int feedback_value2 = 0;
+int feedback_value3 = 0;
 
 int ret1 = SUCCES_OK;
 int ret2 = SUCCES_OK;
+int ret3 = SUCCES_OK;
 
 int target_position1 = 0;
 int target_position2 = 0;
+int target_position3 = 0;
 
 int stepCount = 0;
 int direction = 1;
@@ -22,14 +25,9 @@ Servo angle_claw;
 
 const int currentPosition = 0;
 
-double d1 = 27 * 100;
-double d2 = 23.5 * 100;
-double d3 = 28 * 100;
-double d4 = 38 * 100;
-double Al1 = 36 * 100;
-double Al2 = 31.1 * 100;
-double l1 = 65 * 100;
-double l2 = 102 * 100;
+double l1 = 49.5 * 100;
+double l2 = 49.5 * 100;
+double l3 = 49.5 * 100;
 
 //this variable is a treshold for the actuator
 double heigh = 1000;
@@ -52,43 +50,49 @@ Command scheduledCommand = NULL;
 
 void setup() 
 {
-  // put your setup code here, to run once:
   Serial.begin(9600);
-  // now I set the pin mode for every pin
+ 
 
-  //actuators
-  pinMode(IN1_PIN, OUTPUT);
-  pinMode(IN2_PIN, OUTPUT);
-  pinMode(IN3_PIN, OUTPUT);
-  pinMode(IN4_PIN, OUTPUT);
+  // Actuators
+  pinMode(IN1_A1, OUTPUT);
+  pinMode(IN2_A1, OUTPUT);
+  pinMode(ENA_A1, OUTPUT);
+  
+  pinMode(IN1_A2, OUTPUT);
+  pinMode(IN2_A2, OUTPUT);
+  pinMode(ENA_A2, OUTPUT);
 
-  // enable pins for actuators
-  pinMode(ENA1_PIN, OUTPUT);
-  pinMode(ENA2_PIN, OUTPUT);
+  pinMode(IN1_A3, OUTPUT);
+  pinMode(IN2_A3, OUTPUT);
+  pinMode(ENA_A3, OUTPUT);
 
-  //servos
-  angle.attach(CLAW); // open claw
+  // Open claw
+  angle.attach(CLAW); 
+  
+  /* ================ ISN'T USED ANYMORE ================
   angle_claw.attach(ROTATE_CLAW); // rotate to 0 degree
+     ==================================================== */
 
-  //stepper
-  pinMode(DIR, OUTPUT);
-  pinMode(PUL, OUTPUT);
-  pinMode(ENA, OUTPUT);
+  // Stepper
+  pinMode(DIRECTION_STEPPER, OUTPUT);
+  pinMode(PULSE_STEPPER, OUTPUT);
+  pinMode(ENA_STEPPER, OUTPUT);
 
-  //EEPROM.put(0,0);
-  //set the default values for positions
-  feedback_value1 = analogRead(POTENTIOMETER_PIN1);
-  feedback_value2 = analogRead(POTENTIOMETER_PIN2);
+  // Default values for positions
+  feedback_value1 = analogRead(FEEDBACK_A1);
+  feedback_value2 = analogRead(FEEDBACK_A2);
+  feedback_value3 = analogRead(FEEDBACK_A3);
+
   target_position1 = feedback_value1;
   target_position2 = feedback_value2;
-  //startPosition = EEPROM.get(0, startPosition);
+  target_position3 = feedback_value3;
+
   backToInitialPos(msgLen, msg);
 
-  //default position
+  // Default claw position
   angle.write(180);
-  angle_claw.write(0);
 
-  // this is used for timeout
+  // Timeout
   time = millis()/1000;
 }
 
@@ -96,75 +100,86 @@ void loop()
 {
   if(!emergency)
   {
-    //Serial.println(startPosition);
     if(ret1 == SUCCES_OK)
     {
-      //I check if I am at the position I want
+      // Check if position is ok for (1) first actuator
       if((abs(feedback_value1 - target_position1)) > ERROR_MARGIN)
       {
-
-        // if it isn't there I countiune the movment
+        // Move if not
         moveActuator(ACTUATOR1, target_position1);
       }
       else
       {
-        // I stop the acutator becuase I am at the position I want
-        digitalWrite(IN1_PIN, LOW);
-        digitalWrite(IN2_PIN, LOW);
+        // Stop the actuator
+        digitalWrite(IN1_A1, LOW);
+        digitalWrite(IN2_A1, LOW);
       }
 
-
-      //I check if I am at the position I want
+      
+      // Check if position is ok for (2) second actuator
       if((abs(feedback_value2 - target_position2)) > ERROR_MARGIN)
       {
-        // if it isn't there I countiune the movment
+        // Move if not
         moveActuator(ACTUATOR2, target_position2);
       }
       else
       {
-        // I stop the acutator becuase I am at the position I want
-        digitalWrite(IN3_PIN, LOW);
-        digitalWrite(IN4_PIN, LOW);
+        // Stop the actuator
+        digitalWrite(IN1_A2, LOW);
+        digitalWrite(IN2_A2, LOW);
+      }
+
+      // Check if position is ok for (3) third actuator
+      if((abs(feedback_value3 - target_position3)) > ERROR_MARGIN)
+      {
+        // Move if not
+        moveActuator(ACTUATOR3, target_position3);
+      }
+      else
+      {
+        // Stop the actuator
+        digitalWrite(IN1_A3, LOW);
+        digitalWrite(IN2_A3, LOW);
       }
     }
 
     if(ret2 == SUCCES_OK)
     {
-      //If I don't make the number of steps
-      //then I shoul contiune the rotation
-      if(stepCount != stepTarget && digitalRead(ENA) == HIGH)
+      // Continue rotation if steps are not enough
+      if(stepCount != stepTarget && digitalRead(ENA_STEPPER) == HIGH)
       {
-        //this will move with one step
-        digitalWrite(PUL,HIGH); 
+        // Move one step
+        digitalWrite(PULSE_STEPPER,HIGH); 
         delayMicroseconds(500); 
-        digitalWrite(PUL,LOW); 
+
+        digitalWrite(PULSE_STEPPER,LOW); 
         delayMicroseconds(500);
-        //increrase the number of steps
+        
         stepCount++;
         if(no_calibrate)
         {
           startPosition += direction;
-          //EEPROM.put(0, startPosition);
         }
       }
       else
       {
-        // this command will set the enable low
-        // if the stepper is not moving
-        digitalWrite(ENA, LOW);
+        // Disable stepper
+        digitalWrite(ENA_STEPPER, LOW);
       }
 
-      // now I finnish the CMD_FINAL_ARM command
+      // Finish the CMD_FINAL_ARM command
       if(millis()/1000 - time_claw >= 4 && !command && close)
       {
-        // close the claw
+        // Close the claw
         angle.write(45);
-        // mark that the claw is closed
+        
+        // Mark that the claw is closed
         close = false;
-        // introduce a delay such that the claw
-        // has enough time to close
+
+        // Delay such that the claw has enough time to close
         delay(1000);
-        // rise the bottle
+
+        // Rise the object
         target_position1 = 28;
       }
     }
@@ -172,7 +187,7 @@ void loop()
 
   int msgRecieve = receiveByte();
 
-  //check if I recieve something
+  // Check if msg received
   if(msgRecieve)
   {
     if(msg[1] == CMD_PING)
@@ -180,10 +195,8 @@ void loop()
         Response response = pingCommand(msgLen-2, msg+2);
         writeMessage(response.len, response.data);
     }
-    //check if the given command is for actuators
-    else if(msg[1] <= CMD_MOVE_BOTH) 
+    else if(msg[1] <= CMD_MOVE_ALL) 
     {
-      //the command is right then, I set the command and execute it
       scheduledCommand = COMMAND_ARRAY[msg[1]];
       if(scheduledCommand != NULL)
       {
@@ -223,7 +236,7 @@ void loop()
     }
   }
 
-  // timeout for CMD_FINAL
+  // Timeout for CMD_FINAL
   if(millis()/1000 - time >=  BlockingTime || emergency)
   {
     command = true;
@@ -231,48 +244,53 @@ void loop()
 }
 
 
-//this function will move the actuator
+// Actuator movement
 void moveActuator(int actuator, int position)
 {
-  //I set the pins and the feedback value in function of the actuator given
-  // input pins
   int pin1;
   int pin2;
-  // feedback pins
   int potentimeter_pin;
-  // the current position for acutator who is moving
   int feedback_value;
 
   //set the values from above
   if(actuator == ACTUATOR1)
   {
-    feedback_value = feedback_value1 = analogRead(POTENTIOMETER_PIN1);
-    pin1 = IN1_PIN;
-    pin2 = IN2_PIN;
-    potentimeter_pin = POTENTIOMETER_PIN1;
+    feedback_value = feedback_value1 = analogRead(FEEDBACK_A1);
+    pin1 = IN1_A1;
+    pin2 = IN2_A1;
+    potentimeter_pin = FEEDBACK_A1;
   }
   else if(actuator == ACTUATOR2)
   {
-    feedback_value = feedback_value2 = analogRead(POTENTIOMETER_PIN2);
-    pin1 = IN3_PIN;
-    pin2 = IN4_PIN;
-    potentimeter_pin = POTENTIOMETER_PIN2;
+    feedback_value = feedback_value2 = analogRead(FEEDBACK_A2);
+    pin1 = IN1_A2;
+    pin2 = IN2_A2;
+    potentimeter_pin = FEEDBACK_A2;
   }
-  //establish the move I shoul do
+  else if(actuator == ACTUATOR3) 
+  {
+    feedback_value = feedback_value3 = analogRead(FEEDBACK_A3);
+    pin1 = IN1_A3;
+    pin2 = IN2_A3;
+    potentimeter_pin = FEEDBACK_A3;
+  }
+
+  // Establish the move    
   if(feedback_value < position)
   {
-    //this time I shoul extend the actuator
+    // Extend
     digitalWrite(pin1, LOW);
     digitalWrite(pin2, HIGH);
   }
   else
   {
-    //this time I should retract the actuator
+    // Retract
     digitalWrite(pin1, HIGH);
     digitalWrite(pin2, LOW);
   }
   feedback_value = analogRead(potentimeter_pin);
-  //now I set the new position for feedback value for the moved actuator
+
+  // Set the new position for feedback value for the moved actuator
   if(actuator == ACTUATOR1)
   {
     feedback_value1 = feedback_value;
@@ -281,17 +299,20 @@ void moveActuator(int actuator, int position)
   {
     feedback_value2 = feedback_value;
   }
+  else if(actuator == ACTUATOR3)
+  {
+    feedback_value3 = feedback_value;
+  }
 }
 
-// this function will check using forward kinematics 
-// if the top of the arm is to close to the ground
-// in this way I don't hit the claw to the ground
+/* =================================== ISN'T USED ANYMORE ===================================
+// Check using forward kinematics if is to close to the ground
 bool check_y(int position1, int position2)
 {
-  // I calculate the length of actuators
+  // Calculate the length of actuators
   double a1 = Al1 + map(position1, 28, 985, 0, 1000);
   double a2 = Al2 + map(position2, 28, 985, 0, 1000);
-  // this termens are obtained by using math and will help me to calculate the y position
+  // this terms are obtained by using math and will help me to calculate the y position
   double r1 = sqrt(1 - ((d1 * d1 + d2 * d2 - a1 * a1) / (2 * d1 * d2)));
   double r2 = sqrt(1 - ((d3 * d3 + d4 * d4 - a2 * a2) / (2 * d3 * d4)));
   double t1 = (d1 * d1 + d2 * d2 - a1 * a1) / (2 * d1 * d2);
@@ -308,3 +329,4 @@ bool check_y(int position1, int position2)
     return true;
   }
 }
+ ============================================================================================ */

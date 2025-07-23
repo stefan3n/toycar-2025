@@ -57,6 +57,17 @@ def findDevices():
             if device.name == ROBOT_CAMERA:
                 robotCamera = i
 
+    if motorsCamera is None:
+        print("Motor camera device not found.");
+    if robotCamera is None:
+        print("Robot camera device not found");
+    if robot is None:
+        print("Robot device not found");
+    if motors is None:
+        print("Motors device not found");
+    if lidar is None:
+        print("Lidar device not found");
+
     # Not the best way but ROS needs the lidar to always be /dev/ttyUSB0
     # We just exchange the names of lidar and whoever is names /dev/ttyUSB0
     ret_list =[robot, motors, lidar, robotCamera, motorsCamera]

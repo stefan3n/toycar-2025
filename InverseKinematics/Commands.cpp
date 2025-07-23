@@ -1,5 +1,6 @@
 #include "Commands.h"
 #include "HardwareConfiguration.h"
+#include "kinematics.h"
 #include <Arduino.h>
 
 Response pingCommand(int len, const int* args)
@@ -27,46 +28,20 @@ Response pingCommand(int len, const int* args)
 
 int stop(int len, const int*  args)
 {
-  // if I am in emergency state then this command
-  // should not have any effect
+  // Not in emergency state
   if(!emergency)
   {
-    // set enable pins for actuators and 
-    // stepper to LOW, in this way I stop the
-    // movement of the both
-    digitalWrite(ENA1_PIN, LOW);
-    digitalWrite(ENA2_PIN, LOW);
-    digitalWrite(ENA, LOW);
+    // Disable actuators
+    digitalWrite(ENA_A1, LOW);
+    digitalWrite(ENA_A2, LOW);
+    digitalWrite(ENA_A3, LOW);
+
+    // Disable stepper
+    digitalWrite(ENA_STEPPER, LOW);
+
     command = true;
     close = true;
-    //init_pos = true;
-    return SUCCES_OK;
-  }
-  else
-  {
-    return ERROR_BAD_MSG;
-  }
-}
 
-int moveBoth(int len, const int* args)
-{
-  if(command && !emergency)
-  {
-    //check if I have enough arguments
-    if(len < 2)
-    {
-      return ERROR_ARGUMENTS_LENGTH; 
-    }
-    digitalWrite(ENA1_PIN, HIGH);
-    digitalWrite(ENA2_PIN, HIGH);
-    //set the new positions for actuators
-    target_position1 = args[0];
-    target_position1 =  map(target_position1, 0, 1000, 28, 1023);
-    target_position1 = constrain(target_position1, 28, 985);
-
-    target_position2 = args[1];
-    target_position2 =  map(target_position2, 0, 1000, 28, 1023);
-    target_position2 = constrain(target_position2, 28, 985);
     return SUCCES_OK;
   }
   else
@@ -77,27 +52,35 @@ int moveBoth(int len, const int* args)
 
 int moveOne(int len, const int* args)
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
-    //I check if the codification is right
     if(len < 2)
     {
       return ERROR_ARGUMENTS_LENGTH;
     }
-    //now I set the target position in function of the actuators I have given in command and
+
+    // Set the target position of the actuator
     if(args[0] == ACTUATOR1)
     {
       target_position1 = args[1];
-      target_position1 =  map(target_position1, 0, 1000, 28, 1023);
-      target_position1 = constrain(target_position1, 28, 985);
-      digitalWrite(ENA1_PIN, HIGH);
+      target_position1 =  map(target_position1, 0, 1000, 37, 790); // UPDATED - With new actuator limits
+      target_position1 = constrain(target_position1, 37, 790); // UPDATED - With new actuator limits
+      digitalWrite(ENA_A1, HIGH);
     }
     else if (args[0] == ACTUATOR2)
     {
       target_position2 = args[1];
-      target_position2 =  map(target_position2, 0, 1000, 28, 1023);
-      target_position2 = constrain(target_position2, 28, 985);
-      digitalWrite(ENA2_PIN, HIGH);
+      target_position2 =  map(target_position2, 0, 1000, 37, 952); // UPDATED - With new actuator limits
+      target_position2 = constrain(target_position2, 37, 952); // UPDATED - With new actuator limits
+      digitalWrite(ENA_A2, HIGH);
+    }
+    else if(args[0] == ACTUATOR3)
+    {
+      target_position3 = args[1];
+      target_position3 =  map(target_position3, 0, 1000, 29, 957); // UPDATED - With new actuator limits
+      target_position3 = constrain(target_position3, 29, 957); // UPDATED - With new actuator limits
+      digitalWrite(ENA_A3, HIGH);
     }
     else
     {
@@ -111,38 +94,82 @@ int moveOne(int len, const int* args)
   }
 }
 
+int move_all(int len, const int* args)
+{
+  // Not in emergency state & not CMD_FINAL_ARM
+  if(command && !emergency)
+  {
+    if(len < 3)
+    {
+      return ERROR_ARGUMENTS_LENGTH; 
+    }
+
+    digitalWrite(ENA_A1, HIGH);
+    digitalWrite(ENA_A2, HIGH);
+    digitalWrite(ENA_A3, HIGH);
+    
+    // Set the target positions of the actuators
+    target_position1 = args[0];
+    target_position1 =  map(target_position1, 0, 1000, 37, 790); // UPDATED - With new actuator limits
+    target_position1 = constrain(target_position1, 37, 790); // UPDATED - With new actuator limits
+
+    target_position2 = args[1];
+    target_position2 =  map(target_position2, 0, 1000, 37, 952); // UPDATED - With new actuator limits
+    target_position2 = constrain(target_position2, 37, 952); // UPDATED - With new actuator limits
+
+    target_position3 = args[2];
+    target_position3 =  map(target_position3, 0, 1000, 29, 957); // UPDATED - With new actuator limits
+    target_position3 = constrain(target_position3, 29, 957); // UPDATED - With new actuator limits
+
+    return SUCCES_OK;
+  }
+  else
+  {
+    return ERROR_BAD_MSG;
+  }
+}
+
+
 int emergency_cmd(int len, const int* args)
 {
-  // stet the enable pins for any of them to low
-  // and the actuators and stepper stop moving
-  digitalWrite(ENA1_PIN, LOW);
-  digitalWrite(ENA2_PIN, LOW);
-  digitalWrite(ENA, LOW);
-  // now I mark that I am in emergency state
+  // Disable actuators
+  digitalWrite(ENA_A1, LOW);
+  digitalWrite(ENA_A2, LOW);
+  digitalWrite(ENA_A3, LOW)
+
+  // Disable stepper
+  digitalWrite(ENA_STEPPER, LOW);
+
+  // Mark emergency state
   emergency = true;
+
   return SUCCES_OK;
 }
 
 int end_emergency(int len, const int* args)
 {
-  // I mark that I exit the emergency state
+  // Mark emergency state exit
   emergency = false;
-  // set enable pins to HIGH and in this way 
-  // the actuators and stepper can continue 
-  // to move
-  digitalWrite(ENA1_PIN, HIGH);
-  digitalWrite(ENA2_PIN, HIGH);
-  digitalWrite(ENA, HIGH);
-  return SUCCES_OK;
 
+  // Enable actuators
+  digitalWrite(ENA_A1, HIGH);
+  digitalWrite(ENA_A2, HIGH);
+  digitalWrite(ENA_A3, HIGH);
+
+  // Enable stepper
+  digitalWrite(ENA_STEPPER, HIGH);
+
+  return SUCCES_OK;
 }
 
 int rotateLeft(int len, const int* args) 
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
     no_calibrate = true;
-    //check if the command is right(I have a positive number of steps)
+
+    // Input verify
     if(len < 1) 
     {
       return ERROR_ARGUMENTS_LENGTH;
@@ -153,12 +180,12 @@ int rotateLeft(int len, const int* args)
     }
     else 
     {
-      int steps = (int)((double)args[0] / 0.00375);
-      // Now I set the direction and enable pins
-      digitalWrite(DIR, LOW);
-      digitalWrite(ENA, HIGH);
+      int steps = (int)((double)args[0] / 0.00375); // Angle divided by the length of one step
 
-      //set the target
+      digitalWrite(DIRECTION_STEPPER, LOW); // Set the direction
+      digitalWrite(ENA_STEPPER, HIGH); // Enable stepper
+
+      // Set the target
       if(direction > 0)
       {
         stepTarget = (steps - ( stepTarget - stepCount));
@@ -167,9 +194,11 @@ int rotateLeft(int len, const int* args)
       {
         stepTarget = (steps + (stepTarget - stepCount));
       }
-      //set the direction
+
+      // Set the direction
       direction = -1;
-      //reset the step count
+      
+      // Reset the step count
       stepCount = 0;
     }
     return SUCCES_OK;
@@ -182,10 +211,12 @@ int rotateLeft(int len, const int* args)
 
 int rotateRight(int len, const int* args) 
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
     no_calibrate = true;
-    //check if the command is right
+    
+    // Input verify
     if(len < 1) 
     {
       return ERROR_ARGUMENTS_LENGTH;
@@ -196,12 +227,12 @@ int rotateRight(int len, const int* args)
     }
     else 
     {
-      int steps = (int)((double)args[0] / 0.00375);
-      // set the direction and enable pins
-      digitalWrite(ENA, HIGH);
-      digitalWrite(DIR, HIGH);
+      int steps = (int)((double)args[0] / 0.00375); // Angle divided by the length of one step
+      
+      digitalWrite(DIRECTION_STEPPER, HIGH); // Set the direction
+      digitalWrite(ENA_STEPPER, HIGH); // Enable stepper
 
-      //set the target
+      // Set the target
       if(direction < 0)
       {
         stepTarget = (steps - ( stepTarget - stepCount));
@@ -210,9 +241,11 @@ int rotateRight(int len, const int* args)
       {
         stepTarget = (steps + ( stepTarget - stepCount));
       }
-      //reset the step counter
-      stepCount = 0;
-      //set the direction
+      
+      // Reset the step counter
+      stepCount = 0; 
+      
+      // Set the direction
       direction = 1;
     }
     return SUCCES_OK;
@@ -225,14 +258,15 @@ int rotateRight(int len, const int* args)
 
 int startPositionJetson(int len, const int* args)
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
     if(len < 2)
     {
       return ERROR_ARGUMENTS_LENGTH;
     }
-    // set the position based on the last sign it
-    // had when is was last CMD_PING
+
+    // Position set based on the last sign it had (when it was pinged)
     if(args[1])
     {
       startPosition = (-1) * args[0];
@@ -251,46 +285,58 @@ int startPositionJetson(int len, const int* args)
 
 int backToInitialPos(int len, const int* args)
 {
-  // check if I am in emergency state or 
-  // if the arm is executing a CMD_FINAL_ARM
-  // if one of them is true then I return 
-  // an error command
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
-    // let it to modify the start position
     no_calibrate = true;
-    // enable the stepper to move
-    digitalWrite(ENA, HIGH);
-    // set the target position
+   
+    // Enable the stepper
+    digitalWrite(ENA_STEPPER, HIGH);
+
+    // Set the target position
     if(startPosition < 0)
     {
-      digitalWrite(DIR, HIGH);
+      // Set stepper direction
+      digitalWrite(DIRECTION_STEPPER, HIGH);
+
       stepTarget = (-1) * startPosition;
       stepCount = 0;
       direction = 1;
     }
     else
     {
+        // Set stepper direction
         digitalWrite(DIR, LOW);
+
+
         stepTarget = startPosition;
         stepCount = 0;
         direction = -1;
     }
-    // set enable pins for actuators 
-    // to let them to move
-    digitalWrite(ENA1_PIN, HIGH);
-    digitalWrite(ENA2_PIN, HIGH);
-    // set the new targets for actuators
+    
+    // Enable actuators
+    digitalWrite(ENA_A1, HIGH);
+    digitalWrite(ENA_A2, HIGH);
+    digitalWrite(ENA_A3, HIGH);
+
+    // Set the new targets for actuators
     target_position1 = pos1;
-    target_position1 =  map(target_position1, 0, 1000, 28, 1023);
-    target_position1 = constrain(target_position1, 28, 985);
+    target_position1 =  map(target_position1, 0, 1000, 37, 790); // UPDATED - With new actuator limits
+    target_position1 = constrain(target_position1, 37, 790); // UPDATED - With new actuator limits
+
     target_position2 = pos2;
-    target_position2 =  map(target_position2, 0, 1000, 28, 1023);
-    target_position2 = constrain(target_position2, 28, 985);
-    // open the claw
+    target_position2 =  map(target_position2, 0, 1000, 37, 952); // UPDATED - With new actuator limits
+    target_position2 = constrain(target_position2, 37, 952); // UPDATED - With new actuator limits
+
+    target_position3 = pos3;
+    target_position3 =  map(target_position3, 0, 1000, 29, 957); // UPDATED - With new actuator limits
+    target_position3 = constrain(target_position3, 29, 957); // UPDATED - With new actuator limits
+    
+    // Open the claw
     angle.write(180);
-    // rotate the claw to it's initial position
+    // Rotate the claw to it's initial position
     angle_claw.write(0);
+
     return SUCCES_OK;
   }
   else
@@ -301,9 +347,10 @@ int backToInitialPos(int len, const int* args)
 
 int calibrate_left(int len, const int* args) 
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
-    //check if the command is right(I have a positive number of steps)
+    // Verify input
     if(len < 1) 
     {
       return ERROR_BAD_MSG;
@@ -315,11 +362,14 @@ int calibrate_left(int len, const int* args)
     else 
     {
       int steps = args[0];
-      // Now I set the direction and enable pins
-      digitalWrite(DIR, HIGH);
-      digitalWrite(ENA, HIGH);
 
-      //set the target
+      // Set the direction
+      digitalWrite(DIRECTION_STEPPER, HIGH);
+    
+      // Enable stepper
+      digitalWrite(ENA_STEPPER, HIGH);
+
+      // Set the target
       if(direction > 0)
       {
         stepTarget = (steps - ( stepTarget - stepCount));
@@ -328,13 +378,15 @@ int calibrate_left(int len, const int* args)
       {
         stepTarget = (steps + (stepTarget - stepCount));
       }
-      //I set not to count the steps for relative position
+      
       no_calibrate = false;
-      //reset the step count
+      
+      // Reset the step count
       stepCount = 0;
-      //set the direction
+      
+      //Set the direction
       direction = -1;
-      //EEPROM.put(0,0);
+      
       startPosition = 0;
     }
     return SUCCES_OK;
@@ -347,9 +399,10 @@ int calibrate_left(int len, const int* args)
 
 int calibrate_right(int len, const int* args) 
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
-    //check if the command is right
+    // Verify input
     if(len < 1) 
     {
       return ERROR_ARGUMENTS_LENGTH;
@@ -361,11 +414,14 @@ int calibrate_right(int len, const int* args)
     else 
     {
       int steps = args[0];
-      // set the direction and enable pins
-      digitalWrite(ENA, HIGH);
-      digitalWrite(DIR, LOW);
 
-      //set the target
+      // Enable stepper
+      digitalWrite(ENA_STEPPER, HIGH);
+
+      // Set the direction
+      digitalWrite(DIECTION_STEPPER, LOW);
+
+      // Set the target
       if(direction < 0)
       {
         stepTarget = (steps - ( stepTarget - stepCount));
@@ -374,13 +430,15 @@ int calibrate_right(int len, const int* args)
       {
         stepTarget = (steps + ( stepTarget - stepCount));
       }
-      //reset the step counter
+      
+      // Reset the step counter
       stepCount = 0;
-      //I set not to count the steps for relative position
+      
       no_calibrate = false;
-      //set the direction
+      
+      // Set the direction
       direction = 1;
-      //EEPROM.put(0,0);
+      
       startPosition = 0;
     }
     return SUCCES_OK;
@@ -393,10 +451,12 @@ int calibrate_right(int len, const int* args)
 
 int openClaw(int len, const int* args)
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
-    //set the maximum angle for claw to open
+    // Set the maximum angle for claw to open
     angle.write(180);
+    
     return SUCCES_OK;
   }
   else
@@ -407,10 +467,12 @@ int openClaw(int len, const int* args)
 
 int closeClaw(int len, const int* args)
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
-    // set the minimum angle for claw to close
+    // Set the minimum angle for claw to close
     angle.write(45);
+
     return SUCCES_OK;
   }
   else
@@ -419,6 +481,7 @@ int closeClaw(int len, const int* args)
   }
 }
 
+/* ======================= ISN'T USED ANYMORE =======================
 int rotate_claw(int len, const int* args)
 {
   if(command && !emergency)
@@ -451,122 +514,122 @@ int rotate_claw(int len, const int* args)
     return ERROR_BAD_MSG;
   }
 }
+  ===================================================================== */
 
 int final_command(int len, const int* args)
 {
+  // Not in emergency state & not CMD_FINAL_ARM
   if(command && !emergency)
   {
     command = false;
     close = true;
-    // check if the number of arguments is right
+
+    // Verify input
     if(len < 5)
     {
-      // I send an error message
       return ERROR_ARGUMENTS_LENGTH;
     }
     else
     {
       int dir = args[0];
-      // Now I move the arm before I move the actuators
-      // beacuse the actuators are too fast
+      
+      // Stepper movement before actuators move (actuators are faster)
       if(dir == 0)
       {
-        //rotate left
-        digitalWrite(DIR, HIGH);
-        digitalWrite(ENA, HIGH);
-        int steps = (int)((double)args[1] / 0.00375);
+        // Set stepper direction to rotate left
+        digitalWrite(DIRECTION_STEPPER, HIGH);
+
+        // Enable stepper
+        digitalWrite(ENA_STEPPER, HIGH);
+
+        int steps = (int)((double)args[1] / 0.00375); // Angle divided by the length of one step
         int stepCount = 0;
+
+        // Step by step movement
         while(steps != stepCount)
         {
-          digitalWrite(PUL,HIGH); 
+          digitalWrite(PULSE_STEPPER, HIGH); 
           delayMicroseconds(500); 
-          digitalWrite(PUL,LOW); 
+
+          digitalWrite(PULSE_STEPPER, LOW); 
           delayMicroseconds(500);
+
           stepCount++;
           startPosition++;
         }
       }
       else
       {
-        // rotate right
-        digitalWrite(DIR, LOW);
-        digitalWrite(ENA, HIGH);
-        int steps = (int)((double)args[1] / 0.00375);
+        // Set stepper direction to rotate right
+        digitalWrite(DIRECTION_STEPPER, LOW);
+
+        // Enable stepper
+        digitalWrite(ENA_STEPPER, HIGH);
+
+        int steps = (int)((double)args[1] / 0.00375); // Angle divided by the length of one step
         int stepCount = 0;
+
+        // Step by step movement
         while(steps != stepCount)
         {
-          digitalWrite(PUL,HIGH); 
+          digitalWrite(PULSE_STEPPER, HIGH); 
           delayMicroseconds(500); 
-          digitalWrite(PUL,LOW); 
+
+          digitalWrite(PULSE_STEPPER, LOW); 
           delayMicroseconds(500);
+
           stepCount++;
           startPosition--;
         }
       }
-      // set the positions for actuators in function of 
-      // x and y of the object
-      double x = args[2];// -distance given by links
+
+      // Set actuators position based on x and y of the object
+      double x = args[2];
       double y = args[3];
-      // with this series of conditions I can be sure
-      // that the arm is not moving too low and hit the
-      // claw to the bottle
-      if(x-400 >= 11700)
-      {
-        //Serial.println("here");
-        y+=3000;
-      }
-      else if(x >= 11600)
-      {
-        y+=2500;
-      }
-      else if(x >= 11300)
-      {
-        //Serial.print("here");
-        y += 2000;
-      }
-      else if(x >= 11200)
-      {
-        //Serial.print("here");
-        y += 1500;
-      }
-      else if(x >= 11000)
-      {
-        y+= 1200;
-      }
-      else if(x >= 10200)
-      {
-        //Serial.println("here");
-        y += heigh;
-      }
-      else if(x >=10100)
-      {
-        y+=heigh/2;
-      }
-      //correction for x position
-      if(x > 10000)
-      {
-        x+=800;
-      }
-      else
-      {
-        x+=400;
-      }
-      double r = sqrt(x * x + y * y);
-      double t1 = x / sqrt(x * x + y * y);
-      double t2 = (l1 * l1 + r * r - l2 * l2) / (2 * l1 * r);
-      double t3 = y / sqrt(x * x + y * y);
-      double t4 = sqrt(1 - ((l1 * l1 + r * r - l2 * l2) / (2 * l1 * r)) *
-                    ((l1 * l1 + r * r - l2 * l2) / (2 * l1 * r)));
-      double t5 = (l1 * l1 + l2 * l2 - r * r) / (2 * l1 * l2);
-      int a1 = (int)(sqrt(d1 * d1 + d2 * d2 - 2 * d1 * d2 * (t3 * t4 - t1 * t2)) - Al1);
-      int a2 = (int)(sqrt(d3 * d3 + d4 * d4 - 2 * d3 * d4 * t5) - Al2);
-      //set the target positions for actuators
-      target_position1 = map(a1, 0, 1000, 28, 983);
-      target_position1 = constrain(target_position1, 28, 983);
-      target_position2 = map(a2, 0, 1000, 28, 983);
-      target_position2 = constrain(target_position2, 28, 983);
+
+      /*double r2 = sqrt(x*x + y*y);
+
+      // Adjustments to avoid hitting the object
+      if(x > 10000) { x += 800; } else { x += 400; }
+      if(x-400 >= 11700)      { y += 3000; }
+      else if(x >= 11600)     { y += 2500; }
+      else if(x >= 11300)     { y += 2000; }
+      else if(x >= 11200)     { y += 1500; }
+      else if(x >= 11000)     { y += 1200; }
+      else if(x >= 10200)     { y += heigh; }
+      else if(x >= 10100)     { y += heigh / 2; }
+      
+      if(r2 > L1 + L2 || r2 < fabs(L1 - L2)) {
+      return ERROR_BAD_MSG;*/
+    }
+
+    double cos_angle2 = (L1*L1 + L2*L2 - r2*r2) / (2 * L1 * L2);
+    double angle2 = acos(cos_angle2); 
+
+    double cos_angle1 = (L1*L1 + r2*r2 - L2*L2) / (2 * L1 * r2);
+    double angle1 = acos(cos_angle1);
+
+    double theta1 = atan2(y, x) - angle1;
+    double theta3 = phi - theta1 - angle2;
+
+    int a1 = (int)degrees(theta1);
+    int a2 = (int)degrees(angle2);
+    int a3 = (int)degrees(theta3);
+
+    target_position1 = map(a1, 0, 180, 28, 983);
+    target_position1 = constrain(target_position1, 28, 983);
+
+    target_position2 = map(a2, 0, 180, 28, 983);
+    target_position2 = constrain(target_position2, 28, 983);
+
+    target_position3 = map(a3, 0, 180, 28, 983);
+    target_position3 = constrain(target_position3, 28, 983);
+      
+      /* ====== ISN'T USED ANYMORE ====== 
       // rotate the claw
       angle_claw.write(args[4]);
+      */
+
       return SUCCES_OK;
     }
   }

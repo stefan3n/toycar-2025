@@ -80,17 +80,24 @@ Response startCommand(int len, const int* args);
 Response setPwmCommand(int len, const int* args);
 
 /*
+  Excepts: response
+  Errors: None.
+  Brakes all motors
+*/
+Response brakeEffect(Response response);
+
+/*
   Expects no arguments.
   Errors:
     * carState is STATE_IDLE
-  Breaks all motors.
+  Calls brakeEffect.
 */
 Response breakCommand(int len, const int* args);
 
 /*
   Expects no arguments.
   Errors: None.
-  Enters STATE_EMERGENCY and breaks all motors.
+  Enters STATE_EMERGENCY and calls brakeEffect.
 */
 Response emergencyCommand(int len, const int* args);
 

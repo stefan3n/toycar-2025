@@ -84,17 +84,7 @@ Response setPwmCommand(int len, const int* args)
   return response;
 }
 
-Response breakCommand(int len, const int* args)
-{
-  Response response;
-
-  if(carState == STATE_IDLE)
-  {
-    response.data[1] = ERROR_INCORRECT_STATE;
-    response.len = 2;
-    return response;
-  }
-
+Response breakEffect(Response response) {
   motorBreak();
 
   for(int i = 0; i < 4; ++i)
@@ -108,22 +98,27 @@ Response breakCommand(int len, const int* args)
   return response;
 }
 
+Response breakCommand(int len, const int* args)
+{
+  Response response;
+
+  if(carState == STATE_IDLE)
+  {
+    response.data[1] = ERROR_INCORRECT_STATE;
+    response.len = 2;
+    return response;
+  }
+
+  response = breakEffect(response);
+}
+
 Response emergencyCommand(int len, const int* args)
 {
   Response response;
 
   carState = STATE_EMERGENCY;
-  motorBreak();
-
-  for(int i = 0; i < 4; ++i)
-  {
-    ALL_MOTORS[i]->currVelocityCmd = 0;
-    ALL_MOTORS[i]->targetVelocity = 0;
-  }
   
-  response.data[1] = SUCCES_OK;
-  response.len = 2;
-  return response;
+  response = breakEffect(response);
 }
 
 Response endEmergencyCommand(int len, const int* args)
@@ -143,7 +138,7 @@ Response endEmergencyCommand(int len, const int* args)
   return response;
 }
 
-Response sendCountsCommand(int len, const int* args)
+Response sendCountsCommand(int len, const int* args) // unused
 {
   Response response;
 

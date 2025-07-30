@@ -1,0 +1,326 @@
+slam_toolbox:
+  ros__parameters:
+    mode: mapping
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    transform_publish_period: 0.02
+    map_update_interval: 5.0
+    minimum_travel_distance: 0.5
+    minimum_travel_heading: 0.5
+    scan_queue_size: 10
+    use_map_saver: true
+    map_file_name: /home/user/ros2_ws/map
+    map_start_at_dock: false
+
+
+    ----------
+
+    import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist, Quaternion
+from nav_msgs.msg import Odometry
+from tf2_ros import TransformBroadcaster
+from tf_transformations import quaternion_from_euler
+import math
+
+class TfPublisherNode(Node):
+    def __init__(self):
+        super().__init__('tf_publisher_node')
+        self.odom_publisher = self.create_publisher(Odometry, '/odom', 10)
+        self.tf_broadcaster = TransformBroadcaster(self)
+        self.subscription = self.create_subscription(
+            Twist,
+            '/cmd_vel',
+            self.cmd_vel_callback,
+            10)
+        self.x = 0.0
+        self.y = 0.0
+        self.theta = 0.0
+        self.last_time = self.get_clock().now()
+        self.get_logger().info("TF publisher node started")
+
+    def cmd_vel_callback(self, msg):
+        current_time = self.get_clock().now()
+        dt = (current_time - self.last_time).nanoseconds / 1e9
+        self.last_time = current_time
+
+        v = math.sqrt(msg.linear.x**2 + msg.linear.y**2)
+        w = msg.angular.z
+        self.x += v * math.cos(self.theta) * dt
+        self.y += v * math.sin(self.theta) * dt
+        self.theta += w * dt
+
+        # Publică odometria
+        odom = Odometry()
+        odom.header.stamp = current_time.to_msg()
+        odom.header.frame_id = 'odom'
+        odom.child_frame_id = 'base_link'
+        odom.pose.pose.position.x = self.x
+        odom.pose.pose.position.y = self.y
+        odom.pose.pose.position.z = 0.0
+        q = quaternion_from_euler(0, 0, self.theta)
+        odom.pose.pose.orientation = Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+        odom.twist.twist = msg
+        self.odom_publisher.publish(odom)
+
+        # Publică transformarea TF
+        t = TransformStamped()
+        t.header.stamp = current_time.to_msg()
+        t.header.frame_id = 'odom'
+        t.child_frame_id = 'base_link'
+        t.transform.translation.x = self.x
+        t.transform.translation.y = self.y
+        t.transform.translation.z = 0.0
+        t.transform.rotation = odom.pose.pose.orientation
+        self.tf_broadcaster.sendTransform(t)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = TfPublisherNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+
+  ------------------------------------------------
+
+  import rclpy
+from rclpy.node import Node
+from rclpy.action import ActionClient
+from nav2_msgs.action import NavigateToPose
+from geometry_msgs.msg import PoseStamped, TransformStamped
+from std_msgs.msg import String
+from nav_msgs.msg import OccupancyGrid
+from tf2_ros import TransformListener, Buffer
+
+class NavigationNode(Node):
+    def __init__(self):
+        super().__init__('navigation_node')
+        self.action_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        self.command_subscription = self.create_subscription(
+            String,
+            '/navigation_commands',
+            self.command_callback,
+            10)
+        self.map_subscription = self.create_subscription(
+            OccupancyGrid,
+            '/map',
+            self.map_callback,
+            10)
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.map_data = None
+        self.get_logger().info("Navigation node started")
+
+    def command_callback(self, msg):
+        if msg.data.startswith("send_goal"):
+            _, x, y, z = msg.data.split(',')
+            self.send_goal(float(x), float(y), float(z))
+        elif msg.data == "cancel_goal":
+            self.cancel_goal()
+        elif msg.data == "get_position":
+            self.get_position()
+        elif msg.data == "save_map":
+            self.save_map()
+
+    def send_goal(self, x, y, z):
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose.header.frame_id = "map"
+        goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
+        goal_msg.pose.pose.position.x = x
+        goal_msg.pose.pose.position.y = y
+        goal_msg.pose.pose.orientation.z = z
+        goal_msg.pose.pose.orientation.w = 1.0
+        self.action_client.wait_for_server()
+        self.action_client.send_goal_async(goal_msg)
+        self.get_logger().info(f"Sent goal: x={x}, y={y}, z={z}")
+
+    def cancel_goal(self):
+        self.action_client.cancel_goal_async()
+        self.get_logger().info("Goal canceled")
+
+    def get_position(self):
+        try:
+            trans = self.tf_buffer.lookup_transform('map', 'base_link', rclpy.time.Time())
+            x = trans.transform.translation.x
+            y = trans.transform.translation.y
+            z = trans.transform.rotation.z
+            self.get_logger().info(f"Position: x={x}, y={y}, z={z}")
+            with open("startPosition.txt", 'w') as file:
+                file.write(f"{x}\n{y}\n{z}")
+        except Exception as e:
+            self.get_logger().error(f"Failed to get position: {e}")
+
+    def map_callback(self, msg):
+        self.map_data = msg
+        self.get_logger().info("Received map update")
+
+    def save_map(self):
+        if self.map_data:
+            self.get_logger().info("Saving map to /home/user/ros2_ws/map")
+            # Poți folosi nav2_map_server pentru a salva harta
+            # Alternativ, apelează un serviciu sau salvează manual
+        else:
+            self.get_logger().warn("No map data available to save")
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = NavigationNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+    ----------------------------------------------------------
+
+
+    py_modules=[
+    'keyboard_teleop',
+    'cmd_vel_listener',
+    'tf_publisher_node',
+    'navigation_node',
+],
+entry_points={
+    'console_scripts': [
+        'keyboard_teleop = robot_control.keyboard_teleop:main',
+        'cmd_vel_listener = robot_control.cmd_vel_listener:main',
+        'tf_publisher_node = robot_control.tf_publisher_node:main',
+        'navigation_node = robot_control.navigation_node:main',
+    ],
+},
+
+
+----------------------------------------------------------------------------
+
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
+import os
+
+def generate_launch_description():
+    config_dir = os.path.join(get_package_share_directory('robot_control'), 'config')
+    slam_config = os.path.join(config_dir, 'slam_toolbox_config.yaml')
+
+    return LaunchDescription([
+        Node(
+            package='robot_control',
+            executable='keyboard_teleop',
+            name='keyboard_teleop'
+        ),
+        Node(
+            package='robot_control',
+            executable='cmd_vel_listener',
+            name='cmd_vel_listener'
+        ),
+        Node(
+            package='robot_control',
+            executable='tf_publisher_node',
+            name='tf_publisher_node'
+        ),
+        Node(
+            package='robot_control',
+            executable='navigation_node',
+            name='navigation_node'
+        ),
+        Node(
+            package='slam_toolbox',
+            executable='sync_slam_toolbox_node',
+            name='slam_toolbox',
+            parameters=[slam_config]
+        ),
+    ])
+
+    ------------------------------------------
+
+    import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
+import serial
+
+class CmdVelListener(Node):
+    def __init__(self):
+        super().__init__('cmd_vel_listener')
+        self.serial_port = serial.Serial('/dev/ttyACM0', 115200, timeout=0.1)
+        self.cmd_subscription = self.create_subscription(
+            Twist,
+            '/cmd_vel',
+            self.cmd_vel_callback,
+            10)
+        self.scan_subscription = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.scan_callback,
+            10)
+        self.get_logger().info("Connected to /dev/ttyACM0")
+        self.obstacle_detected = False
+        self.obstacle_distance_threshold = 1.0
+
+    def send_command(self, pwmR, pwmL, revR, revL):
+        cmd_str = f"<0,2,{pwmR},{pwmL},{int(revR)},{int(revL)}>"
+        self.serial_port.write(cmd_str.encode())
+        self.get_logger().info(f"Sent command to Arduino: {cmd_str}")
+
+    def scan_callback(self, msg):
+        front_ranges = msg.ranges[0:30] + msg.ranges[-30:]
+        dists = [d for d in front_ranges if d > 0.05]
+        distance = min(dists) if dists else float('inf')
+        self.obstacle_detected = distance < self.obstacle_distance_threshold
+        if self.obstacle_detected:
+            self.get_logger().info(f"Obstacle detected at {distance:.2f}m")
+
+    def cmd_vel_callback(self, msg: Twist):
+        if self.obstacle_detected:
+            self.send_command(0, 0, False, False)  # Oprește robotul
+            return
+
+        linear = msg.linear.x
+        angular = msg.angular.z
+        pwm = 15
+
+        if linear > 0.1:
+            self.send_command(pwm, pwm, False, True)
+        elif linear < -0.1:
+            self.send_command(pwm + 10, pwm, True, True)
+        elif angular > 0.1:
+            self.send_command(pwm, pwm, True, False)
+        elif angular < -0.1:
+            self.send_command(pwm, pwm + 10, False, False)
+        else:
+            self.send_command(0, 0, False, False)
+
+    def destroy_node(self):
+        self.serial_port.close()
+        super().destroy_node()
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = CmdVelListener()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+
+
+  -----------------

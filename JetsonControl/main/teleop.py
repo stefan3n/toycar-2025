@@ -1,83 +1,46 @@
 import rclpy
 from rclpy.node import Node
+from geometry_msgs.msg import Twist
+
 import sys
-import tty
 import termios
+import tty
 import select
-import serial
 
-class KeyboardSerialTeleop(Node):
+class KeyboardTeleop(Node):
     def __init__(self):
-        super().__init__('keyboard_serial_teleop')
-        self.get_logger().info('A pornit serialul.')
-
-    
-        self.serial_port = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
-
-        self.old_settings = termios.tcgetattr(sys.stdin)
+        super().__init__('keyboard_teleop')
+        self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.get_logger().info('Teleop ready. W/A/S/D to move. Q to quit.')
+        self.settings = termios.tcgetattr(sys.stdin)
         tty.setcbreak(sys.stdin.fileno())
-
         self.timer = self.create_timer(0.1, self.timer_callback)
-
-        self.pwm_max = 30
-        self.pwm_min = 20
-
-    def cap_pwm(self, val):
-        val = int(abs(val))
-        return max(self.pwm_min, min(self.pwm_max, val))
 
     def timer_callback(self):
         if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
             key = sys.stdin.read(1)
+            twist = Twist()
 
-            pwmL, pwmR = 0, 0
-            dirL, dirR = 1, 1
-
-            if key == 'q':
-                self.get_logger().info('Iesire.')
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
+            if key == 'w':
+                twist.linear.x = 1.0
+            elif key == 's':
+                twist.linear.x = -1.0
+            elif key == 'a':
+                twist.angular.z = 1.0
+            elif key == 'd':
+                twist.angular.z = -1.0
+            elif key == 'q':
+                self.get_logger().info("Quit pressed. Exiting...")
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
                 rclpy.shutdown()
                 return
 
-            elif key == '\x1b':
-                next1, next2 = sys.stdin.read(2)
-                if next1 == '[':
-                    if next2 == 'W':  # sus
-                        pwmL = pwmR = self.pwm_max
-                        dirL = 1
-                        dirR = 1
-                    elif next2 == 'S':  
-                        pwmL = pwmR = self.pwm_max
-                        dirL = 0
-                        dirR = 0
-                    elif next2 == 'A':  
-                        pwmL = pwmR = self.pwm_max
-                        dirL = 0
-                        dirR = 1
-                    elif next2 == 'D': 
-                        pwmL = pwmR = self.pwm_max
-                        dirL = 1
-                        dirR = 0
-                    else:
-                        return  
-                else:
-                    return  
-            else:
-               
-                pwmL = pwmR = 0
-                dirL = dirR = 1
-
-            command = f"<0,2,{pwmR},{pwmL},{dirR},{dirL}>"
-            self.serial_port.write(command.encode())
-            self.get_logger().info(f'Sent command: {command}')
+            self.publisher_.publish(twist)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = KeyboardSerialTeleop()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+    node = KeyboardTeleop()
+    rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 

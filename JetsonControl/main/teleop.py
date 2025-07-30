@@ -60,35 +60,53 @@ import serial
 class CmdVelListener(Node):
     def __init__(self):
         super().__init__('cmd_vel_listener')
-        self.subscription = self.create_subscription(Twist, '/cmd_vel', self.listener_callback, 10)
-        self.serial = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
-        self.get_logger().info('Listening to /cmd_vel and sending to Arduino.')
+        self.serial_port = serial.Serial('/dev/ttyACM0', 115200, timeout=0.1)
+        self.subscription = self.create_subscription(
+            Twist,
+            '/cmd_vel',
+            self.cmd_vel_callback,
+            10)
+        self.get_logger().info("CmdVelListener started, connected to Arduino on /dev/ttyACM0")
 
-    def listener_callback(self, msg):
+    def send_command(self, pwmR, pwmL, revR, revL):
+        # Construim string-ul comenzii in formatul Arduino
+        cmd_str = f"<0,2,{pwmR},{pwmL},{int(revR)},{int(revL)}>"
+        self.serial_port.write(cmd_str.encode())
+        self.get_logger().info(f"Sent command to Arduino: {cmd_str}")
+
+    def cmd_vel_callback(self, msg: Twist):
         linear = msg.linear.x
         angular = msg.angular.z
-        pwm = 30
+        pwm = 100  # ajustează viteza între 0-255 după necesitate
 
         if linear > 0.1:
-            command = f"<0,2,{pwm},{pwm},0,1>"
+            # Mers înainte
+            self.send_command(pwm, pwm, False, False)
         elif linear < -0.1:
-            command = f"<0,2,-{pwm},-{pwm},0,1>"
+            # Mers înapoi
+            self.send_command(pwm, pwm, True, True)
         elif angular > 0.1:
-            command = f"<0,2,-{pwm},{pwm},0,1>"
+            # Viraj stânga
+            self.send_command(pwm, pwm, False, True)
         elif angular < -0.1:
-            command = f"<0,2,{pwm},-{pwm},0,1>"
+            # Viraj dreapta
+            self.send_command(pwm, pwm, True, False)
         else:
-            command = "<0,2,0,0,0,1>"
-
-        self.serial.write(command.encode())
-        self.get_logger().info(f"Sent: {command}")
+            # Stop
+            self.send_command(0, 0, False, False)
 
 def main(args=None):
     rclpy.init(args=args)
     node = CmdVelListener()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.serial_port.close()
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
+

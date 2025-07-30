@@ -50,3 +50,45 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import Twist
+import serial
+
+class CmdVelListener(Node):
+    def __init__(self):
+        super().__init__('cmd_vel_listener')
+        self.subscription = self.create_subscription(Twist, '/cmd_vel', self.listener_callback, 10)
+        self.serial = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+        self.get_logger().info('Listening to /cmd_vel and sending to Arduino.')
+
+    def listener_callback(self, msg):
+        linear = msg.linear.x
+        angular = msg.angular.z
+        pwm = 30
+
+        if linear > 0.1:
+            command = f"<0,2,{pwm},{pwm},0,1>"
+        elif linear < -0.1:
+            command = f"<0,2,-{pwm},-{pwm},0,1>"
+        elif angular > 0.1:
+            command = f"<0,2,-{pwm},{pwm},0,1>"
+        elif angular < -0.1:
+            command = f"<0,2,{pwm},-{pwm},0,1>"
+        else:
+            command = "<0,2,0,0,0,1>"
+
+        self.serial.write(command.encode())
+        self.get_logger().info(f"Sent: {command}")
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = CmdVelListener()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
